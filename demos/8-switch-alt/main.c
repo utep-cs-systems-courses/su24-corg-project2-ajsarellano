@@ -1,0 +1,54 @@
+#include <msp430.h>
+#include "libTimer.h"
+
+#define LED_GREEN BIT0           // P1.0
+#define LED_RED BIT6             // P1.6
+#define LEDS (BIT0 | BIT6)
+
+#define SW1 BIT3		/* defines the switch to be on p1.3 */
+#define SWITCHES SW1		/* only 1 switch on this board */
+
+void main(void) 
+{  
+  configureClocks();
+
+  P1DIR |= LEDS;                /* sets LEDs as outputs*/
+  P1OUT &= ~LEDS;		/* both LEDs initially off */
+  
+  P1REN |= SWITCHES;		/* enables resistors for switches */
+  P1IE |= SWITCHES;		/* enable interrupts from switches */
+  P1OUT |= SWITCHES;		/* pull-ups for switches */
+  P1DIR &= ~SWITCHES;		/* sets the switch as an input */
+
+  or_sr(0x18);  // CPU off, GIE on
+} 
+
+void
+switch_interrupt_handler()
+{
+  char p1val = P1IN;		/* switch is in P1 (reads current state of pins on port 1)*/
+                                // P1IN is the port 1 input register
+
+/* update switch interrupt sense to detect changes from current buttons */
+  P1IES |= (p1val & SWITCHES);	/* if switch up, sense down (p1val will be 1) */
+  P1IES &= (p1val | ~SWITCHES);	/* if switch down, sense up (p1val will be 0) x*/
+
+/* up=red, down=green */
+  if (p1val & SW1) {            // if switch is not pressed, turn on red and turn off green LED
+    P1OUT |= LED_RED;
+    P1OUT &= ~LED_GREEN;
+  } else {                      // if switch is pressed, turn on green and turn off red LED
+    P1OUT |= LED_GREEN;
+    P1OUT &= ~LED_RED;
+  }
+}
+
+
+/* Switch on P1 (S2) */
+void
+__interrupt_vec(PORT1_VECTOR) Port_1(){
+  if (P1IFG & SWITCHES) {	      /* did a button cause this interrupt? */
+    P1IFG &= ~SWITCHES;		      /* clear pending sw interrupts */
+    switch_interrupt_handler();	/* single handler for all switches */
+  }
+}
